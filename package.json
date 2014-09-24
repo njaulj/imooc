@@ -1,0 +1,19 @@
+{
+  "name": "iMooc",
+  "version": "0.0.1",
+  "description": "mooc video downloader",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "mooc",
+    "video",
+    "downloader"
+  ],
+  "author": "stern",
+  "license": "MIT",
+  "dependencies": {
+    "request": "^2.44.0"
+  }
+}
