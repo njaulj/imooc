@@ -2,9 +2,19 @@
   "name": "iMooc",
   "version": "0.0.1",
   "description": "mooc video downloader",
-  "main": "index.js",
+  "main": "bin/imooc",
+  "bin": {
+    "imooc": "./bin/imooc"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sternzhang/imooc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sternzhang/imooc/issues"
   },
   "keywords": [
     "mooc",
@@ -14,6 +24,7 @@
   "author": "stern",
   "license": "MIT",
   "dependencies": {
+    "commander": "^2.3.0",
     "request": "^2.44.0"
   }
 }
