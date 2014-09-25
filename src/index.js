@@ -20,8 +20,7 @@ var clToken = '7f75e24cb1f7e5c358f03a7b40a60976',
 		token: ciToken
 	};
 
-var iMooc = function() {
-};
+var iMooc = function() {};
 
 iMooc.prototype.list = function(page, keyword) {
 	clParams.page = page;
@@ -74,9 +73,11 @@ iMooc.prototype.download = function(cid, chapterids, dest) {
 					var chapter = chapters[chapterid - 1],
 						chapterInfo = chapter.chapter,
 						medias = chapter.media;
-					for (var i = 0, mlen = medias.length; i < mlen; i++) {
-						moocDownload(medias[i].media_url, medias[i].name, dest, next);
-					}
+					async.each(medias, function(media, callback) {
+						moocDownload(media.media_url, media.name, dest, callback);
+					}, function(err) {
+						next();
+					});
 				} else {
 					console.log('no chapter ', chapterid);
 				}
@@ -97,14 +98,13 @@ function moocDownload(url, name, dest, callback) {
 		vstream = null;
 
 	if (basename == 'L' && /mp4/.test(extname)) {
-		url = path.join(dirname, 'H' + extname);
+		url = dirname + path.sep + 'H' + extname;
 	}
 
 	vstream = fs.createWriteStream(savename);
 
 	request.get(url)
 		.on('data', function(data) {
-			console.log(data);
 			vstream.write(data);
 		}).on('end', function(err) {
 			callback(err);
