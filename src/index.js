@@ -2,6 +2,7 @@ var request = require('request');
 var async = require('async');
 var path = require('path');
 var fs = require('fs');
+var mkdirp = require('mkdirp');
 
 
 var clToken = '7f75e24cb1f7e5c358f03a7b40a60976',
@@ -54,7 +55,7 @@ iMooc.prototype.show = function(cid) {
 	});
 };
 
-iMooc.prototype.download = function(cid, chapterids, dest) {
+iMooc.prototype.download = function(cid, chapterSeqs, dest) {
 	ciParams.cid = cid;
 	var options = {url: courseinfoURL, form: ciParams};
 
@@ -62,21 +63,41 @@ iMooc.prototype.download = function(cid, chapterids, dest) {
 		if (!err) {
 			var len = chapters.length,
 				seqs = [];
+			// 获取chapter seq
 			chapters.forEach(function(chapter) {
 				seqs.push(chapter.chapter.seq);
 			});
-			chapterids = typeof chapterids === 'undefined' ? 
-				seqs : chapterids;
+			chapterSeqs = typeof chapterSeqs === 'undefined' ?
+				seqs : chapterSeqs;
 
-			async.eachLimit(chapterids, 5, function(chapterid, next) {
-				if (seqs.indexOf(chapterid) != -1) {
-					var chapter = chapters[chapterid - 1],
+			async.eachLimit(chapterSeqs, 5, function(seq, next) {
+				if (seqs.indexOf(seq) != -1) {
+					var chapter = chapters[seq - 1],
 						chapterInfo = chapter.chapter,
-						medias = chapter.media;
-					async.each(medias, function(media, callback) {
-						moocDownload(media.media_url, media.name, dest, callback);
-					}, function(err) {
-						next();
+						medias = chapter.media,
+						seqdir = path.join(dest, chapterInfo.name);
+
+					async.waterfall([
+						// 检查chapter文件夹是否存在
+						function(callback) {
+							fs.exists(seqdir, function(exists) {
+								callback(null, exists);
+							});
+						},
+						function(exists, callback) { // 存在则执行下一步，不存在则创建
+							if (!exists) {
+								mkdirp(seqdir, function(err) {
+									return callback(err);
+								});
+							}
+							callback(null);
+						}
+					], function(err) {
+						async.each(medias, function(media, callback) {
+							moocDownload(media, seqdir, callback);
+						}, function(err) {
+							next();
+						});
 					});
 				} else {
 					console.log('no chapter ', chapterid);
@@ -90,19 +111,20 @@ iMooc.prototype.download = function(cid, chapterids, dest) {
 	});
 };
 
-function moocDownload(url, name, dest, callback) {
-	var extname = path.extname(url),
+function moocDownload(media, dest, callback) {
+	var url = media.media_url,
+		name = media.name,
+		seq = media.media_seq,
+		extname = path.extname(url),
 		basename = path.basename(url, extname),
 		dirname = path.dirname(url),
-		savename = path.join(dest, name + extname),
+		savename = path.join(dest, seq + '_' + name + extname),
 		vstream = null;
 
 	if (basename == 'L' && /mp4/.test(extname)) {
-		url = dirname + path.sep + 'H' + extname;
+		url = dirname + '/H' + extname;
 	}
-
 	vstream = fs.createWriteStream(savename);
-
 	request.get(url)
 		.on('data', function(data) {
 			vstream.write(data);

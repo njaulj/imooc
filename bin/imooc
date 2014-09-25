@@ -36,10 +36,6 @@ var destination_path = program.destination || process.cwd(),
 
 operate = operate ? operate.toLowerCase() : 'list';
 
-if (!/^[\.|\/|~]/.test(destination_path)) {
-    destination_path = path.join(process.cwd(), destination_path);
-}
-
 
 switch(operate) {
     case 'show':
