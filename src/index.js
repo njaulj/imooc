@@ -3,12 +3,15 @@ var async = require('async');
 var path = require('path');
 var fs = require('fs');
 var mkdirp = require('mkdirp');
+var os = require('os');
 
 
 var clToken = '7f75e24cb1f7e5c358f03a7b40a60976',
 	ciToken = '8a23e151eacfe1e9556e71f8eb6b3c9b',
+	coToken = '5f5786aad68fcc240eb2a5e0deaf9f5b',
 	courselistURL = 'http://www.imooc.com/api2/courselist_ver2',
 	courseinfoURL = 'http://www.imooc.com/api2/getcpinfo_ver2',
+	courseintroURL = 'http://www.imooc.com/api2/getcourseintro',
 	clParams = {
 		timestamp: Date.now(),
 		uid: 0,
@@ -19,6 +22,11 @@ var clToken = '7f75e24cb1f7e5c358f03a7b40a60976',
 		uid: 0,
 		cid: '',
 		token: ciToken
+	},
+	coParams = {
+		uid: 0,
+		cid: '',
+		token: coToken
 	};
 
 var iMooc = function() {};
@@ -55,84 +63,126 @@ iMooc.prototype.show = function(cid) {
 	});
 };
 
-iMooc.prototype.download = function(cid, chapterSeqs, dest) {
-	ciParams.cid = cid;
-	var options = {url: courseinfoURL, form: ciParams};
-
-	moocPost(options, function(err, chapters) {
-		if (!err) {
-			var len = chapters.length,
-				seqs = [];
-			// 获取chapter seq
-			chapters.forEach(function(chapter) {
-				seqs.push(chapter.chapter.seq);
-			});
-			chapterSeqs = typeof chapterSeqs === 'undefined' ?
-				seqs : chapterSeqs;
-
-			async.eachLimit(chapterSeqs, 5, function(seq, next) {
-				if (seqs.indexOf(seq) != -1) {
-					var chapter = chapters[seq - 1],
-						chapterInfo = chapter.chapter,
-						medias = chapter.media,
-						seqdir = path.join(dest, chapterInfo.name);
-
-					async.waterfall([
-						// 检查chapter文件夹是否存在
-						function(callback) {
-							fs.exists(seqdir, function(exists) {
-								callback(null, exists);
-							});
-						},
-						function(exists, callback) { // 存在则执行下一步，不存在则创建
-							if (!exists) {
-								mkdirp(seqdir, function(err) {
-									return callback(err);
-								});
-							}
-							callback(null);
-						}
-					], function(err) {
-						async.each(medias, function(media, callback) {
-							moocDownload(media, seqdir, callback);
-						}, function(err) {
-							next();
-						});
-					});
+iMooc.prototype.download = function(cid, cseqs, dest) {
+	coParams.cid = cid;
+	var ctrOptions = {url: courseintroURL, form: coParams},
+		destdir = path.join(dest, cid);
+	async.waterfall([
+		// 课程文件夹是否存在
+		function(callback) {
+			fs.exists(destdir, function(exists) {
+				callback(null, exists);
+			})
+		},
+		// 不存在创建，存在直接下一步
+		function(exists, callback) {
+			if (exists) {
+				return callback(null);
+			}
+			mkdirp(destdir, function(err) {
+				callback(err);
+			}); 
+		},
+		// 获取课程介绍信息
+		function(callback) {
+			moocPost(ctrOptions, function(err, data) {
+				if (!err) {
+					callback(null, data);
 				} else {
-					console.log('no chapter ', chapterid);
+					callback(err);
+				}
+			});
+		},
+		// 写入课程介绍信息
+		function(data, callback) {
+			var content = ['课程名称：' + data[0].course_name,
+				'课程简介：' + data[0].course_des].join(os.EOL);
+
+			fs.writeFile(path.join(destdir, 'README.txt'), content, function(err) {
+				callback(err);
+			});
+		},
+		function(callback) {
+			ciParams.cid = cid;
+			var cinOptions = { url: courseinfoURL, form: ciParams };
+			moocPost(cinOptions, function(err, data) {
+				if (err) return callback(err);
+				var len = data.length,
+					seqs = [];
+				// 获取课程章节
+				data.forEach(function(c) {
+					console.log(c);
+					seqs.push(c.chapter.seq);
+				});
+				cseqs = typeof cseqs === 'undefined' ?
+					seqs : cseqs;
+				callback(null, cseqs, seqs, data);
+			});
+		},
+		function(cseqs, seqs, data, callback) {
+			async.eachLimit(cseqs, 5, function(seq, next) {
+				if (seqs.indexOf(seq) !== -1) {
+					var chapter = data[seq - 1];
+					moocDownload(chapter, destdir, next);
+				} else {
+					// 不存在此章节
+					next();
 				}
 			}, function(err) {
-				console.log('download over.');
+				callback(err);
 			});
-		} else {
-
 		}
+	], function(err) {
+		console.log('hahah');
 	});
 };
 
-function moocDownload(media, dest, callback) {
-	var url = media.media_url,
-		name = media.name,
-		seq = media.media_seq,
-		extname = path.extname(url),
-		basename = path.basename(url, extname),
-		dirname = path.dirname(url),
-		savename = path.join(dest, seq + '_' + name + extname),
-		vstream = null;
+function moocDownload(chapter, dest, callback) {
+	var info = chapter.chapter,
+		medias = chapter.media,
+		chapdir = path.join(dest, info.seq + '_' +info.name);
+	async.waterfall([
+		function(next) {
+			fs.exists(chapdir, function(exists) {
+				next(null, exists);
+			});
+		},
+		function(exists, next) {
+			if (exists) return next(null);
+			mkdirp(chapdir, function(err) {
+				next(err);
+			});
+		},
+		function(next) {
+			async.each(medias, function(media, next) {
+				var url = media.media_url,
+					name = media.name,
+					seq = media.media_seq,
+					ext = path.extname(url),
+					base = path.basename(url, ext),
+					dir = path.dirname(url),
+					savepath = path.join(chapdir, seq + '_' + name + ext),
+					vstream = null;
+				if (base == 'L' && /mp4/.test(ext)) {
+					url = dir + '/H' + ext;
+				}
+				vstream = fs.createWriteStream(savepath);
 
-	if (basename == 'L' && /mp4/.test(extname)) {
-		url = dirname + '/H' + extname;
-	}
-	vstream = fs.createWriteStream(savename);
-	request.get(url)
-		.on('data', function(data) {
-			vstream.write(data);
-		}).on('end', function(err) {
-			callback(err);
-		}).on('error', function(err) {
-			console.log(err);
-		});
+				request.get(url).on('data', function(data) {
+					vstream.write(data);
+				}).on('end', function(err) {
+					next();
+				}).on('error', function(err) {
+					next();
+				})
+			}, function(err) {
+				next(null);
+			});
+		}
+	], function(err) {
+		console.log(info.seq, info.name, ' finish download.');
+		callback(err);
+	});
 }
 
 function moocPost(options, callback) {
@@ -146,7 +196,6 @@ function moocPost(options, callback) {
 		callback(err);
 	});
 }
-
 
 
 module.exports = iMooc;
