@@ -2,49 +2,66 @@
 
 var program = require('commander');
 var path = require('path');
+var fs = require('fs');
+var mkdirp = require('mkdirp');
 var iMooc = require('../src/index');
 
 
 var pkg = require('../package.json');
-
 var version = pkg.version;
+
+function chapters(val) {
+    return val.split(',').map(function(item) {
+        return +item.trim();
+    });
+}
 
 program
     .version(version)
     .option('-p, --page [value]', 'set course list page')
     .option('-d, --destination [value]', 'set save path')
-    .option('-i, --id [value]', 'set course id')
-    .option('-a, --action [value]', 'set imooc action')
+    .option('-i, --cid [value]', 'set course id')
+    .option('-o, --operate [value]', 'set imooc action')
     .option('-k, --keyword [value]', 'set search keyword')
-    .option('-c, --chapter [value]', 'set download chapter')
+    .option('-c, --chapters <items>', 'set download chapter', chapters)
     .parse(process.argv);
 
-var destination_path = program.destination,
-    page = program.page,
-    cid = program.id,
-    chapter = program.chapter,
-    action = program.action,
+var destination_path = program.destination || process.cwd(),
+    page = program.page || '1',
+    cid = program.cid,
+    chapters = program.chapters,
+    operate = program.operate,
     keyword = program.keyword,
     imooc = new iMooc();
 
+operate = operate ? operate.toLowerCase() : 'list';
 
-action = typeof action !== 'function' ? action.toLowerCase() : 'list';
-
-switch(action) {
-    case 'list':
-        imooc[action](page, keyword);
-    break;
-
-    case 'show':
-        imooc[action](cid);
-    break;
-
-    case 'download':
-        imooc[action](cid, chapter);
-    break;
-
-    default:
-
-    break;
+if (!/^[\.|\/|~]/.test(destination_path)) {
+    destination_path = path.join(process.cwd(), destination_path);
 }
 
+
+switch(operate) {
+    case 'show':
+        imooc[operate](cid);
+    break;
+    case 'download':
+        fs.exists(destination_path, function(exists) {
+            if (exists) {
+                return imooc[operate](cid, chapters, destination_path);
+            }
+            mkdirp(destination_path, function(err) {
+                if (!err) {
+                    imooc[operate](cid, chapters, destination_path);
+                } else {
+                    console.log('create error.');
+                }
+            });
+        });
+    break;
+    case 'list':
+        imooc[operate](page, keyword);
+    break;
+    default:
+    break;
+}
