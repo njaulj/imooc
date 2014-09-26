@@ -188,9 +188,9 @@ function moocDownload(chapter, dest, callback) {
 function moocPost(options, callback) {
 	request.post(options, function(err, response, body) {
 		if (!err && response.statusCode == 200) {
-			var response = JSON.parse(body);
-			if (response.errorCode == 1000) {
-				return callback(err, response.data);
+			var postData = JSON.parse(body);
+			if (postData.errorCode == 1000) {
+				return callback(err, postData.data);
 			}
 		}
 		callback(err);
