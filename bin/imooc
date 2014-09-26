@@ -1,63 +1,94 @@
 #!/usr/bin/env node
+var imooc = require('../src');
+var opt = require('optimist');
+var color = require('colors');
+var prettyjson = require('prettyjson');
+var argv = opt
+    .usage("[Usage]\n\n imooc [command|keyword]\n\nCommands:")
+    .argv;
 
-var program = require('commander');
-var path = require('path');
-var fs = require('fs');
-var mkdirp = require('mkdirp');
-var iMooc = require('../src/index');
+switch (argv._[0]) {
+    case 's':
+    case 'search':
+        argv = opt
+            .usage("imooc " + argv._[0] + " [keyword]")
+            .argv;
 
-
-var pkg = require('../package.json');
-var version = pkg.version;
-
-function chapters(val) {
-    return val.split(',').map(function(item) {
-        return +item.trim();
-    });
-}
-
-program
-    .version(version)
-    .option('-p, --page [value]', 'set course list page')
-    .option('-d, --destination [value]', 'set save path')
-    .option('-i, --cid [value]', 'set course id')
-    .option('-o, --operate [value]', 'set imooc action')
-    .option('-k, --keyword [value]', 'set search keyword')
-    .option('-c, --chapters <items>', 'set download chapter', chapters)
-    .parse(process.argv);
-
-var destination_path = program.destination || process.cwd(),
-    page = program.page || '1',
-    cid = program.cid,
-    chapters = program.chapters,
-    operate = program.operate,
-    keyword = program.keyword,
-    imooc = new iMooc();
-
-operate = operate ? operate.toLowerCase() : 'list';
-
-
-switch(operate) {
-    case 'show':
-        imooc[operate](cid);
-    break;
-    case 'download':
-        fs.exists(destination_path, function(exists) {
-            if (exists) {
-                return imooc[operate](cid, chapters, destination_path);
+        var keyword = argv._[1];
+        if (!keyword || argv.help) {
+            opt.showHelp();
+            return;
+        }
+        keyword = keyword.trim();
+        imooc.search(keyword, function(err, data) {
+            if (err) return imooc.error(err);
+            if (data.length == 0) {
+                return printLn('暂时没有你要找的课程');
             }
-            mkdirp(destination_path, function(err) {
-                if (!err) {
-                    imooc[operate](cid, chapters, destination_path);
-                } else {
-                    console.log('create error.');
-                }
+            printLn("搜索 " + keyword.bold + " 共有 " + (data.length + "").bold + " 门相关课程。");
+            printLn("");
+
+            data.forEach(function(item) {
+                printLn(padString(item.id, 3).grey + " " + item.name.replace(keyword, keyword.bold));
             });
         });
     break;
+    case 'l':
     case 'list':
-        imooc[operate](page, keyword);
+        argv = opt
+            .usage('imooc ' + argv._[0] + ' [-p pageNumber]')
+            .argv;
+        var page = argv.p || '1';
+        imooc.list(page, function(err, data) {
+            if (err) return imooc.error(err);
+            if (data.length == 0) {
+                return printLn('暂时没有课程');
+            }
+            printLn('热门课程如下，共有 ' + (data.length+'').bold + ' 门课。');
+            printLn("");
+
+            data.forEach(function(item) {
+                console.log(prettyjson.render({
+                    "课程号": item.id,
+                    "课程名称": item.name,
+                    "课程描述": item.desc,
+                    "时长": (item.duration/(1000*60*60)).toFixed(2) + '小时'
+                }));
+                printLn("");
+            });
+        });
+    break;
+    case 'g':
+    case 'get':
+        argv = opt
+            .usage('imooc ' + argv._[0] + 'courseid -c [chapters]')
+            .argv;
+
+        var cid = argv._[1],
+            chapters = argv.c;
+        // chapters.map(function(item) {
+        //     return (item+'').trim();
+        // });
+        // console.log(chapters);
     break;
     default:
+        if (argv.version || argv.v) {
+            var json = require('../package.json');
+            printLn(json.version);
+        } else {
+            opt.showHelp();
+        }
     break;
+}
+
+function padString(str, num) {
+    var len = (str+'').length;
+    return len < num ? Array(num-len+1).join(' ') + str : str + '';
+}
+
+function printLn() {
+    var args = [].slice.call(arguments, 0);
+    args[0] = "  " + args[0];
+    console.log.apply(this, args);
+    return true;
 }
