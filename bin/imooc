@@ -3,6 +3,10 @@ var imooc = require('../src');
 var opt = require('optimist');
 var color = require('colors');
 var prettyjson = require('prettyjson');
+var fs = require('fs');
+var mkdirp = require('mkdirp');
+var async = require('async');
+var path = require('path');
 var argv = opt
     .usage("[Usage]\n\n imooc [command|keyword]\n\nCommands:")
     .argv;
@@ -61,15 +65,32 @@ switch (argv._[0]) {
     case 'g':
     case 'get':
         argv = opt
-            .usage('imooc ' + argv._[0] + 'courseid -c [chapters]')
+            .usage('imooc ' + argv._[0] + 'courseid [-c 1,2,3]')
             .argv;
 
         var cid = argv._[1],
-            chapters = argv.c;
-        // chapters.map(function(item) {
-        //     return (item+'').trim();
-        // });
-        // console.log(chapters);
+            chapters = argv.c ? argv.c.split(',') : [],
+            destdir = path.join(process.cwd(), cid+'');
+        if (typeof cid === 'undefined') return imooc.error('课程号不能为空');
+        async.waterfall([
+            function(next) {
+                fs.exists(destdir, function(exists) {
+                    next(null, exists);
+                });
+            },
+            function(exists, next) {
+                if (exists) return next(null);
+                mkdirp(destdir, function(err) {
+                    next(err);
+                })
+            }
+        ], function(err) {
+            if (err) return imooc.error(err);
+            imooc.get(cid, chapters, destdir, function(err) {
+                if (err) imooc.error(err);
+
+            });
+        });
     break;
     default:
         if (argv.version || argv.v) {
@@ -88,7 +109,5 @@ function padString(str, num) {
 
 function printLn() {
     var args = [].slice.call(arguments, 0);
-    args[0] = "  " + args[0];
     console.log.apply(this, args);
-    return true;
 }
