@@ -41,6 +41,12 @@ exports.list = function(page, cb) {
 	clParams.page = page;
 	var listOptions = { url: courselistURL, form: clParams};
 	imoocPost(listOptions, cb);
+};
+
+exports.display = function(id, cb) {
+	ciParams.cid = id;
+	var displayOptions = { url: courseinfoURL, form: ciParams };
+	imoocPost(displayOptions, cb);
 }
 
 exports.get = function(cid, chapters, destdir, cb) {
@@ -49,7 +55,10 @@ exports.get = function(cid, chapters, destdir, cb) {
 	async.waterfall([
 		function(next) {
 			imoocPost(getOptions, function(err, data) {
-				if (err) return next(err);
+				if (err) {
+					printError(err);
+					return next(err);
+				}
 				next(null, data);
 			});
 		},
@@ -57,6 +66,7 @@ exports.get = function(cid, chapters, destdir, cb) {
 			var content = ['课程名称：' + data[0].course_name,
 				'课程简介：' + data[0].course_des].join(os.EOL);
 			fs.writeFile(path.join(destdir, 'README.txt'), content, function(err) {
+				if (err) printError(err);
 				next(err);
 			});
 		},
@@ -65,6 +75,7 @@ exports.get = function(cid, chapters, destdir, cb) {
 			var cinOptions = {url: courseinfoURL, form: ciParams};
 			imoocPost(cinOptions, function(err, data) {
 				if (err) {
+					printError(err);
 					return next(err);
 				}
 				var len = data.length,
@@ -78,7 +89,7 @@ exports.get = function(cid, chapters, destdir, cb) {
 			});
 		},
 		function(chapters, seqs, data, next) {
-			async.eachLimit(chapters, 5, function(id, callback) {
+			async.eachSeries(chapters, function(id, callback) {
 				if (seqs.indexOf(id) !== -1) {
 					var chapter = data[id - 1];
 					imoocDownload(chapter, destdir, callback);
@@ -86,18 +97,19 @@ exports.get = function(cid, chapters, destdir, cb) {
 					callback();
 				}
 			}, function(err) {
+				if (err) printError(err);
 				next(err);
 			});
 		}
 	], function(err) {
-		// if (err) ;
+		if (err) printError(err);
 		cb(err);
 	});
-}
+};
 
-exports.error = function(error) {
+var printError = exports.error = function(error) {
 	console.log('错误'.red + ' ' + (error instanceof Object ? error.message : error));
-}
+};
 
 function imoocDownload(course, destdir, callback) {
 	var chapter = course.chapter,
@@ -116,7 +128,7 @@ function imoocDownload(course, destdir, callback) {
 			});
 		},
 		function(next) {
-			async.each(media, function(m, next) {
+			async.each(media, function(m, cb) {
 				var url = m.media_url,
 					name = m.name,
 					seq = m.media_seq,
@@ -132,9 +144,9 @@ function imoocDownload(course, destdir, callback) {
 				request.get(url).on('data', function(data) {
 					vstream.write(data);
 				}).on('end', function() {
-					next();
+					cb();
 				}).on('error', function(err) {
-					next();
+					cb();
 				});
 			}, function(err) {
 				next(err);
