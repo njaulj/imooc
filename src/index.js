@@ -49,7 +49,7 @@ exports.display = function(id, cb) {
 	imoocPost(displayOptions, cb);
 }
 
-exports.get = function(cid, chapters, destdir, cb) {
+exports.get = function(cid, chapters, destdir) {
 	coParams.cid = cid;
 	var getOptions = { url: courseintroURL, form: coParams};
 	async.waterfall([
@@ -66,8 +66,8 @@ exports.get = function(cid, chapters, destdir, cb) {
 			var content = ['课程名称：' + data[0].course_name,
 				'课程简介：' + data[0].course_des].join(os.EOL);
 			fs.writeFile(path.join(destdir, 'README.txt'), content, function(err) {
-				if (err) printError(err);
-				next(err);
+				if (err) return printError(err);
+				next();
 			});
 		},
 		function(next) {
@@ -82,14 +82,14 @@ exports.get = function(cid, chapters, destdir, cb) {
 					seqs = [];
 				// 获取课程章节
 				data.forEach(function(c) {
-					seqs.push(c.chapter.seq);
+					seqs.push(c.chapter.seq+'');
 				});
 				chapters = chapters.length ? chapters : seqs;
 				next(null, chapters, seqs, data);
 			});
 		},
 		function(chapters, seqs, data, next) {
-			async.eachSeries(chapters, function(id, callback) {
+			async.each(chapters, function(id, callback) {
 				if (seqs.indexOf(id) !== -1) {
 					var chapter = data[id - 1];
 					imoocDownload(chapter, destdir, callback);
@@ -103,7 +103,6 @@ exports.get = function(cid, chapters, destdir, cb) {
 		}
 	], function(err) {
 		if (err) printError(err);
-		cb(err);
 	});
 };
 
@@ -132,15 +131,10 @@ function imoocDownload(course, destdir, callback) {
 				var url = m.media_url,
 					name = m.name,
 					seq = m.media_seq,
-					ext = path.extname(url),
-					base = path.basename(url, ext),
-					dir = path.dirname(url),
-					savepath = path.join(chapdir, seq+'_'+name+ext),
-					vstream = null;
-				if (base == 'L' && /mp4/.test(ext)) {
-					url = dir + '/H' + ext;
-				}
-				vstream = fs.createWriteStream(savepath);
+					ext = path.extname(url);
+				if (!ext) return cb();
+				var savepath = path.join(chapdir, seq+'_'+name+ext),
+					vstream = fs.createWriteStream(savepath);
 				request.get(url).on('data', function(data) {
 					vstream.write(data);
 				}).on('end', function() {

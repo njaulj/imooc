@@ -45,7 +45,7 @@ switch (argv._[0]) {
             .usage('imooc ' + argv._[0] + ' [pageNumber]')
             .argv;
         var page = argv._[1];
-        if (!page || argv.help) {
+        if (argv.help) {
             opt.showHelp();
             return;
         }
@@ -81,31 +81,26 @@ switch (argv._[0]) {
             return;
         }
 
-        console.log(argv.c);
-
         var chapters = argv.c ? (argv.c+'').split(',') : [],
             destdir = path.join(process.cwd(), cid+'');
 
         
-        // async.waterfall([
-        //     function(next) {
-        //         fs.exists(destdir, function(exists) {
-        //             next(null, exists);
-        //         });
-        //     },
-        //     function(exists, next) {
-        //         if (exists) return next(null);
-        //         mkdirp(destdir, function(err) {
-        //             next(err);
-        //         })
-        //     }
-        // ], function(err) {
-        //     if (err) return imooc.error(err);
-        //     imooc.get(cid, chapters, destdir, function(err) {
-        //         if (err) imooc.error(err);
-
-        //     });
-        // });
+        async.waterfall([
+            function(next) {
+                fs.exists(destdir, function(exists) {
+                    next(null, exists);
+                });
+            },
+            function(exists, next) {
+                if (exists) return next(null);
+                mkdirp(destdir, function(err) {
+                    next(err);
+                })
+            }
+        ], function(err) {
+            if (err) return imooc.error(err);
+            imooc.get(cid, chapters, destdir);
+        });
     break;
     case 'd':
     case 'display':
@@ -121,8 +116,7 @@ switch (argv._[0]) {
             if (data.length == 0) return imooc.error('暂无课程内容');
             printLn('本课程共有' + (data.length+"").bold + ' 章：');
             data.forEach(function(course) {
-                printLn('第 ' + course.chapter.seq + ' 章: ');
-                printLn(course.chapter.name);
+                printLn('第 ' + course.chapter.seq + ' 章: ' + course.chapter.name);
             });
         });
     break;
